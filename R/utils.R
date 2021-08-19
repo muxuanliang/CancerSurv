@@ -127,9 +127,9 @@ get_tpr_tnr <- function(fit=NULL, subjectId=NULL, timeToEvent=NULL, measureTime=
   w_positive <- ifelse((sub_data$timeToEvent-timePoint)<=tau0, 1, 0)/sub_data$ipc
   w_negative <- ifelse((sub_data$timeToEvent-timePoint)>tau0, 1, 0)/sub_data$ipc
 
-  tpr <-
+  tpr <- mean(w_positive * estimatedDecision * sub_data$censoringIndicator)/mean(w_positive * sub_data$censoringIndicator)
+  tnr <- mean(w_negative * (1 - estimatedDecision))/mean(w_negative)
 
-
-  return(res)
+  return(data.frame(tpr=tpr, tnr=tnr))
 }
 
