@@ -22,9 +22,10 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, covariat
       sub_data$ipcw[sub_data$indicator==1]=survest(sub_data$timeToEvent[sub_data$indicator==1])
       sub_data$ipcw[sub_data$indicator==0]=survest(tau0+times[i])
     } else if (methodFitCensoring=="cox"){
-      coxfit <- survival::coxph(survival::Surv(sub_data$timeToEvent,censored)~sub_data[,1:numberCovariate])
-      sub_data$ipcw[sub_data$indicator==1]=predict(coxfit, newdata=sub_data$timeToEvent[sub_data$indicator==1], type="survival")
-      sub_data$ipcw[sub_data$indicator==0]=predict(coxfit, newdata=u+times[i], type="survival")
+      model=paste0("coxfit <- survival::coxph(survival::Surv(sub_data$timeToEvent,censored)~", paste(colnames(covariate), collapse=" + "),", data=sub_data)" )
+      eval(parse(text=model))
+      sub_data$ipcw[sub_data$indicator==1]=predict(coxfit, type="survival")[sub_data$indicator==1]
+      sub_data$ipcw[sub_data$indicator==0]=predict(coxfit, newdata=data.frame(sub_data[sub_data$indicator==0, 1:numberCovariate],timeToEvent=rep(tau0+times[i], times=sum(sub_data$indicator==0))), type="survival")
     }
     idx=NA
     for(k in 1:nrow(sub_data)){
