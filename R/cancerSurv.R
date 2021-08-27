@@ -156,10 +156,10 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
 
     Cutoff=seq(1:100)*0.01
     Phi=Tpf=Fpf=NA
-    visit_index=dataFrame$measureTimeDiscrete/tau0+1
+    visit_index=dataFrame$measureTimeDiscrete/tau0
     for(kkl in 1:length(Cutoff)){
       cutoff=Cutoff[kkl]
-      cutoff=rep(cutoff, 5)
+      cutoff=rep(cutoff, length(times))
       rule=NA
       for(i in 1:nrow(dataFrame)){
         rule[i]=ifelse(dataFrame$risk_score[i]>cutoff[visit_index[i]], 1, -1)
@@ -173,7 +173,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
         sub_data=sub_data[idx,]
         sub1=sub_data[(sub_data$timeToEvent-sub_data$measureTime)<=tau0,]
         sub2=sub_data[(sub_data$timeToEvent-sub_data$measureTime)>tau0,]
-        phi[i]=sum(sub1$rule==1)/nrow(sub1)-tradeoff*sum(sub2$rule==1)/nrow(sub2)
+
         phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
         tpf[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)
         fpf[i]=sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc)
