@@ -132,6 +132,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     km <- survival::survfit(survival::Surv(sub_data$time,censored)~1)
     survest <- stepfun(km$time, c(1, km$surv))
 
+    dataFrame$ipcc <- rep(0, times=NROW(dataFrame))
     for(i in 1:length(times)){
       sub_data=dataFrame[dataFrame$measureTimeDiscrete==times[i],]
       sub_data$ipcw=rep(0, nrow(sub_data))
@@ -141,9 +142,8 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       for(k in 1:nrow(sub_data)){
         idx[k]=which(sub_data$subjectId[k]==dataFrame$subjectId & dataFrame$measureTimeDiscrete==times[i])
       }
-      ipc[idx]=sub_data$ipcw
+      dataFrame$ipcc[idx]=sub_data$ipcw
     }
-    dataFrame$ipcc=ipc
 
     covariate=covariate[which(dataFrame$censoringIndicator==1|(dataFrame$censoringIndicator==0&dataFrame$indicator==0)),]
     dataFrame=dataFrame[which(dataFrame$censoringIndicator==1|(dataFrame$censoringIndicator==0&dataFrame$indicator==0)),]
