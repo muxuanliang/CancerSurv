@@ -129,7 +129,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     sub_data$indicator=ifelse(sub_data$timeToEvent-sub_data$measureTime<=tau0, 1,0)
 
     censored= 1-sub_data$censoringIndicator
-    km <- survfit( Surv(sub_data$time,censored)~1)
+    km <- survival::survfit(survival::Surv(sub_data$time,censored)~1)
     survest <- stepfun(km$time, c(1, km$surv))
 
     for(i in 1:length(times)){
