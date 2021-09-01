@@ -178,9 +178,9 @@ get_tpr_tnr <-
       sub_data <- sub_data[idx, ]
 
       w_positive <-
-        ifelse((sub_data$timeToEvent - timePoint) <= tau0, 1, 0) / sub_data$ipc
+        ifelse((sub_data$timeToEvent - sub_data$measureTime) <= tau0, 1, 0) / sub_data$ipc
       w_negative <-
-        ifelse((sub_data$timeToEvent - timePoint) > tau0, 1, 0) / sub_data$ipc
+        ifelse((sub_data$timeToEvent - sub_data$measureTime) > tau0, 1, 0) / sub_data$ipc
 
       res$tpr[res$timePoint == timePoint] <-
         mean(w_positive * sub_data$estimatedDecision * sub_data$censoringIndicator) /
