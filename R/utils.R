@@ -77,21 +77,52 @@ get_event_time <- function(pid, time, gleasonScores, treatYear, timeOnAS){
   return(data.frame(pid = uniquePid, eventTime = eventTime, eventIndicator = eventIndicator))
 }
 
-get_max_core_ratio <- function(pid,cores_ratio,cores_ratio_baseline){
-  max_cores_ratio <- array(0, c(length(cores_ratio),1))
+get_max_value <- function(pid,value,value_baseline = NA){
+  max_value <- array(0, c(length(value),1))
   uniquePid <- unique(pid)
   for(tmp in uniquePid){
-    max_cores_ratio[pid==tmp] <- get_max_core_ratio_per_patient(cores_ratio[pid==tmp], cores_ratio_baseline[pid==tmp])
+    max_value[pid==tmp] <- get_max_value_per_patient(value[pid==tmp], value_baseline[pid==tmp])
   }
-  max_cores_ratio
+  max_value
 }
 
-get_max_core_ratio_per_patient <- function(cores_ratio, cores_ratio_baseline){
-  max_cores_ratio <- array(0, c(length(cores_ratio),1))
-  for (index in 1:length(cores_ratio)){
-    max_cores_ratio[index] <- max(c(cores_ratio[1:index], 0, cores_ratio_baseline), na.rm = TRUE)
+get_max_value_per_patient <- function(value, value_baseline = NA){
+  max_value <- array(0, c(length(value),1))
+  for (index in 1:length(value)){
+    max_value[index] <- max(c(value[1:index], 0, value_baseline), na.rm = TRUE)
   }
-  max_cores_ratio
+  max_value
+}
+
+get_recent_value <- function(pid,value,value_baseline = NA){
+  recent_value <- rep(0, by=length(value))
+  uniquePid <- unique(pid)
+  for(tmp in uniquePid){
+    if (anyNA(value_baseline[pid==tmp])){
+      value_baseline[pid==tmp] <- get_baseline_value_per_patient(value[pid==tmp])
+    }
+    if (anyNA(value_baseline[pid==tmp])){
+      print(tmp)
+      next
+    }
+    recent_value[pid==tmp] <- get_recent_value_per_patient(value[pid==tmp], value_baseline[pid==tmp])
+  }
+  recent_value
+}
+
+get_baseline_value_per_patient <- function(value){
+  value_vec_rm_na <- value[which(!is.na(value))]
+  baseline_value <- rep(value_vec_rm_na[1], by=length(value))
+}
+
+get_recent_value_per_patient <- function(value, value_baseline = NA){
+  recent_value <- array(0, c(length(value),1))
+  for (index in 1:length(value)){
+    value_vec <- c(value_baseline, value[1:index])
+    value_vec_rm_na <- value_vec[which(!is.na(value_vec))]
+    recent_value[index] <- value_vec_rm_na[length(value_vec_rm_na)]
+  }
+  recent_value
 }
 
 get_tpr_tnr <-
