@@ -42,7 +42,7 @@ get_event_time <- function(pid, time, gleasonScores, treatYear, timeOnAS){
           }
         }
       } else {
-        if (progressionTime <= treatYear_tmp){
+        if (progressionTime < treatYear_tmp){
           eventTime[index] <- progressionTime
           eventIndicator[index] <- 1
         } else {
@@ -100,10 +100,6 @@ get_recent_value <- function(pid,value,value_baseline = NA){
   for(tmp in uniquePid){
     if (anyNA(value_baseline[pid==tmp])){
       value_baseline[pid==tmp] <- get_baseline_value_per_patient(value[pid==tmp])
-    }
-    if (anyNA(value_baseline[pid==tmp])){
-      print(tmp)
-      next
     }
     recent_value[pid==tmp] <- get_recent_value_per_patient(value[pid==tmp], value_baseline[pid==tmp])
   }
