@@ -101,6 +101,9 @@ get_recent_value <- function(pid,value,value_baseline = NA){
     if (anyNA(value_baseline[pid==tmp])){
       value_baseline[pid==tmp] <- get_baseline_value_per_patient(value[pid==tmp])
     }
+    if (anyNA(value_baseline[pid==tmp])){
+      next
+    }
     recent_value[pid==tmp] <- get_recent_value_per_patient(value[pid==tmp], value_baseline[pid==tmp])
   }
   recent_value
