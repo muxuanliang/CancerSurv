@@ -64,7 +64,7 @@ get_event_time <- function(pid, time, gleasonScores, treatYear, timeOnAS){
           }
         }
       } else {
-        if (progressionTime <= treatYear_tmp){
+        if (progressionTime < treatYear_tmp){
           eventTime[index] <- progressionTime
           eventIndicator[index] <- 1
         } else {
