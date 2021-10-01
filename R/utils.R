@@ -227,3 +227,69 @@ sampleBasedOnPid <- function(pidList, sampleRatio = 0.5){
 
   return(list(sampledPid=sampledPid, restPid=uniquePid[!(uniquePid %in% sampledPid)]))
 }
+
+get_saved_missed_biopsy <- function(fit = NULL,
+                                    subjectId = NULL,
+                                    timeToEvent = NULL,
+                                    measureTime = NULL,
+                                    measureTimeDiscrete = NULL,
+                                    covariate = NULL,
+                                    censoringIndicator = NULL,
+                                    positive_biopsy = NULL,
+                                    negative_biopsy = NULL,
+                                    tau0 = 6,
+                                    timePoints){
+  numberCovariate <- NCOL(covariate)
+  if (is.null(colnames(covariate))) {
+    colnames(covariate) <- paste0("v", 1:(NCOL(covariate)))
+  }
+  dataFrame <-
+    data.frame(
+      covariate = covariate,
+      subjectId = subjectId,
+      timeToEvent = timeToEvent,
+      measureTime = measureTime,
+      measureTimeDiscrete = measureTimeDiscrete,
+      censoringIndicator = censoringIndicator,
+      positive_biopsy = positive_biopsy,
+      negative_biopsy = negative_biopsy
+    )
+  dataFrame$estimatedDecision <-
+    covariate %*% fit$coef[-1] + fit$coef[1] > 0
+
+  count_saved_negative <- count_missed_positive <- 0
+  for (i in length(dataFrame$subjectId)){
+    if(negative_biopsy==1 & dataFrame$estimatedDecision==FALSE){
+      count_saved_negative <- count_saved_negative+1
+    }
+    if(negative_biopsy==1 & dataFrame$estimatedDecision==FALSE){
+      count_missed_positiv <- count_missed_positiv+1
+    }
+  }
+  list(negative_biopsy=sum(dataFrame$negative_biopsy), saved_biopsy=count_saved_negative, positive_biopsy=sum(dataFrame$positive_biopsy), missed_biopsy=count_missed_positiv)
+}
+
+get_any_biopsy <- function(data_select_discrete, data_biopsy, tau0=0.5){
+  negative_biopsy <- positive_biopsy <- NULL
+  for (i in 1:nrow(data_select_discrete)){
+    pid <- data_select_discrete$CISNET_ID[i]
+    biopsy_time <- data_biopsy$TimeSince_Dx[data_biopsy$CISNET_ID==pid]
+    if (any((biopsy_time >=data_select_discrete$timePoint[i]) & (biopsy_time < data_select_discrete$timePoint[i]+tau0))){
+      index <- min(which(biopsy_time >=data_select_discrete$timePoint[i]))
+      negative_biopsy[i] <- data_biopsy$negative_biopsy[data_biopsy$CISNET_ID==pid][index]
+      positive_biopsy[i] <- data_biopsy$positive_biopsy[data_biopsy$CISNET_ID==pid][index]
+    } else {
+      negative_biopsy[i] <- positive_biopsy[i] <- 0
+    }
+  }
+  list(negative_biopsy=negative_biopsy, positive_biopsy=positive_biopsy)
+}
+
+get_mean_value <- function(pid, value){
+  res <- array(0, length(pid))
+  uniquePid <- unique(pid)
+  for (id in uniquePid){
+    res[pid==id] <- mean(value[pid==id], na.rm=TRUE)
+  }
+  res
+}
