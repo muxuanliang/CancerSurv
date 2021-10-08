@@ -314,10 +314,10 @@ get_mean_value <- function(pid, value){
 
 get_saved_missed_biopsy_backward <- function(fit = NULL,
                                     biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.isPositive,
-                                    PSATable.covariate, PSATable.subjectId, PSATable.measureTime){
-  numberCovariate <- NCOL(covariate)
-  if (is.null(colnames(covariate))) {
-    colnames(covariate) <- paste0("v", 1:(NCOL(covariate)))
+                                    PSATable.covariate, PSATable.subjectId, PSATable.measureTime, tau0=0.5, time_varying=FALSE){
+  numberCovariate <- NCOL(PSATable.covariate)
+  if (is.null(colnames(PSATable.covariate))) {
+    colnames(PSATable.covariate) <- paste0("v", 1:(NCOL(PSATable.covariate)))
   }
   dataFrame <-
     data.frame(
@@ -327,17 +327,17 @@ get_saved_missed_biopsy_backward <- function(fit = NULL,
     )
   if (!time_varying){
     dataFrame$estimatedDecision <-
-      covariate %*% fit$coef[-1] + fit$coef[1] > 0
+      PSATable.covariate %*% fit$coef[-1] + fit$coef[1] > 0
   } else {
-    for (i in 1:nrow(covariate)){
+    for (i in 1:nrow(PSATable.covariate)){
       index <- which(measureTimeDiscrete[i]==timePoints)
       dataFrame$estimatedDecision[i] <-
-        covariate[i,] %*% fit[[index]]$coef[-1] + fit[[index]]$coef[1] > 0
+        PSATable.covariatee[i,] %*% fit[[index]]$coef[-1] + fit[[index]]$coef[1] > 0
     }
   }
 
   count_negative <- count_positive <- count_saved_negative <- count_missed_positive <- 0
-  for (i in length(biopsyTable.subjectId)){
+  for (i in 1:length(biopsyTable.subjectId)){
     which.subject <- biopsyTable.subjectId[i]
     boolVector <- biopsyTable.measureTime[i]-dataFrame$measureTime[dataFrame$subjectId==which.subject]<=tau0 & biopsyTable.measureTime[i]-dataFrame$measureTime[dataFrame$subjectId==which.subject]>0
     if(any(boolVector)){
@@ -359,5 +359,5 @@ get_saved_missed_biopsy_backward <- function(fit = NULL,
       count_missed_positive <- count_missed_positive+1
     }
   }
-  list(negative_biopsy=sum(biopsyTable.isPositive), saved_biopsy=count_saved_negative, positive_biopsy=sum(!biopsyTable.isPositive), missed_biopsy=count_missed_positive)
+  list(negative_biopsy=count_negative, saved_biopsy=count_saved_negative, positive_biopsy=count_positive, missed_biopsy=count_missed_positive)
 }
