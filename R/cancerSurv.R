@@ -1,4 +1,5 @@
-cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, method=c("osf", "sm", "pc_glm"), methodFitCensoring="km"){
+cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, method=c("osf", "sm", "pc_glm"), methodFitCensoring="km", time_varying = FALSE){
+  if (!time_varying){
   numberCovariate <- NCOL(covariate)
   if (is.null(colnames(covariate))){
     colnames(covariate) <- paste0("v", 1:(NCOL(covariate)))
@@ -48,7 +49,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     weighted=weight=denom=NA
     for(i in 1:nrow(dataFrame)){
       sub_data=dataFrame[dataFrame$measureTimeDiscrete==dataFrame$measureTimeDiscrete[i],]
-      idd=dataFrame$measureTimeDiscrete[i]/tau0
+      idd=dataFrame$measureTimeDiscrete[i]/tau0 - min(dataFrame$measureTimeDiscrete)/tau0 + 1
       denom[i]=denomm[idd]
       w1=ifelse((dataFrame$timeToEvent[i]-dataFrame$measureTime[i])<=tau0, 1, 0)/denom[i]
       w2=ifelse((dataFrame$timeToEvent[i]-dataFrame$measureTime[i])>tau0, 1, 0)/(1-denom[i])
@@ -111,7 +112,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     dataFrame$response=response
 
     weight_glm = NULL
-    visit_index = dataFrame$measureTimeDiscrete/tau0
+    visit_index = dataFrame$measureTimeDiscrete/tau0-min(dataFrame$measureTimeDiscrete)/tau0 + 1
     weight_glm = dataFrame$response/ denomm[visit_index]-tradeoff*((1-dataFrame$response)/(1- denomm[visit_index]))
     dataFrame$weight_glm = weight_glm
     model=paste0("geepack::geeglm(ifelse(weight_glm>0, 1, 0)~", paste(colnames(covariate), collapse=" + "),", id=subjectId, corstr='independence', data=dataFrame,family='binomial')" )
@@ -156,7 +157,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
 
     Cutoff=seq(1:100)*0.01
     Phi=Tpf=Fpf=NA
-    visit_index=dataFrame$measureTimeDiscrete/tau0
+    visit_index=dataFrame$measureTimeDiscrete/tau0 - min(dataFrame$measureTimeDiscrete)/tau0 + 1
     for(kkl in 1:length(Cutoff)){
       cutoff=Cutoff[kkl]
       cutoff=rep(cutoff, length(times))
@@ -190,4 +191,17 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     res = list(coef=stan(PC_GLM))
   }
   return(res)
+  } else {
+    timePoint <- unique(measureTimeDiscrete)
+    res <- NULL
+    index<-1
+    for (time_point in timePoint){
+      res[[index]] <- cancerSurv(subjectId=subjectId[measureTimeDiscrete==time_point], timeToEvent=timeToEvent[measureTimeDiscrete==time_point],
+                 measureTime=measureTime[measureTimeDiscrete==time_point], measureTimeDiscrete=measureTimeDiscrete[measureTimeDiscrete==time_point],
+                 covariate=covariate[measureTimeDiscrete==time_point,], censoringIndicator=censoringIndicator[measureTimeDiscrete==time_point],
+                 tau0=tau0, tradeoff=tradeoff, method=method, methodFitCensoring=methodFitCensoring, time_varying = FALSE)
+      index <- index+1
+    }
+    return(res)
+  }
 }

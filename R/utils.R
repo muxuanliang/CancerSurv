@@ -134,7 +134,7 @@ get_tpr_tnr <-
            censoringIndicator = NULL,
            tau0 = 6,
            timePoints,
-           methodFitCensoring = "km") {
+           methodFitCensoring = "km", time_varying=FALSE) {
     numberCovariate <- NCOL(covariate)
     if (is.null(colnames(covariate))) {
       colnames(covariate) <- paste0("v", 1:(NCOL(covariate)))
@@ -148,8 +148,17 @@ get_tpr_tnr <-
         measureTimeDiscrete = measureTimeDiscrete,
         censoringIndicator = censoringIndicator
       )
-    dataFrame$estimatedDecision <-
-      covariate %*% fit$coef[-1] + fit$coef[1] > 0
+    if (!time_varying){
+      dataFrame$estimatedDecision <-
+        covariate %*% fit$coef[-1] + fit$coef[1] > 0
+    } else {
+      for (i in 1:nrow(covariate)){
+        index <- which(measureTimeDiscrete[i]==timePoints)
+        dataFrame$estimatedDecision[i] <-
+          covariate[i,] %*% fit[[index]]$coef[-1] + fit[[index]]$coef[1] > 0
+      }
+    }
+
 
     res <- data.frame(tpr = rep(NA, rep=length(timePoints)),
                       tnr = rep(NA, rep=length(timePoints)),
@@ -238,6 +247,7 @@ get_saved_missed_biopsy <- function(fit = NULL,
                                     positive_biopsy = NULL,
                                     negative_biopsy = NULL,
                                     tau0 = 6,
+                                    time_varying = FALSE,
                                     timePoints){
   numberCovariate <- NCOL(covariate)
   if (is.null(colnames(covariate))) {
@@ -254,19 +264,27 @@ get_saved_missed_biopsy <- function(fit = NULL,
       positive_biopsy = positive_biopsy,
       negative_biopsy = negative_biopsy
     )
-  dataFrame$estimatedDecision <-
-    covariate %*% fit$coef[-1] + fit$coef[1] > 0
+  if (!time_varying){
+    dataFrame$estimatedDecision <-
+      covariate %*% fit$coef[-1] + fit$coef[1] > 0
+  } else {
+    for (i in 1:nrow(covariate)){
+      index <- which(measureTimeDiscrete[i]==timePoints)
+      dataFrame$estimatedDecision[i] <-
+        covariate[i,] %*% fit[[index]]$coef[-1] + fit[[index]]$coef[1] > 0
+    }
+  }
 
   count_saved_negative <- count_missed_positive <- 0
   for (i in length(dataFrame$subjectId)){
-    if(negative_biopsy==1 & dataFrame$estimatedDecision==FALSE){
+    if(negative_biopsy[i]==1 & dataFrame$estimatedDecision[i]==FALSE){
       count_saved_negative <- count_saved_negative+1
     }
-    if(negative_biopsy==1 & dataFrame$estimatedDecision==FALSE){
-      count_missed_positiv <- count_missed_positiv+1
+    if(positive_biopsy[i]==1 & dataFrame$estimatedDecision[i]==TRUE){
+      count_missed_positive <- count_missed_positive+1
     }
   }
-  list(negative_biopsy=sum(dataFrame$negative_biopsy), saved_biopsy=count_saved_negative, positive_biopsy=sum(dataFrame$positive_biopsy), missed_biopsy=count_missed_positiv)
+  list(negative_biopsy=sum(dataFrame$negative_biopsy), saved_biopsy=count_saved_negative, positive_biopsy=sum(dataFrame$positive_biopsy), missed_biopsy=count_missed_positive)
 }
 
 get_any_biopsy <- function(data_select_discrete, data_biopsy, tau0=0.5){
@@ -292,4 +310,40 @@ get_mean_value <- function(pid, value){
     res[pid==id] <- mean(value[pid==id], na.rm=TRUE)
   }
   res
+}
+
+get_saved_missed_biopsy_backward <- function(fit = NULL,
+                                    biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.isPositive,
+                                    PSATable.covariate, PSATable.subjectId, PSATable.measureTime){
+  numberCovariate <- NCOL(covariate)
+  if (is.null(colnames(covariate))) {
+    colnames(covariate) <- paste0("v", 1:(NCOL(covariate)))
+  }
+  dataFrame <-
+    data.frame(
+      covariate = PSATable.covariate,
+      subjectId = PSATable.subjectId,
+      measureTime = PSATable.measureTime
+    )
+  if (!time_varying){
+    dataFrame$estimatedDecision <-
+      covariate %*% fit$coef[-1] + fit$coef[1] > 0
+  } else {
+    for (i in 1:nrow(covariate)){
+      index <- which(measureTimeDiscrete[i]==timePoints)
+      dataFrame$estimatedDecision[i] <-
+        covariate[i,] %*% fit[[index]]$coef[-1] + fit[[index]]$coef[1] > 0
+    }
+  }
+
+  count_saved_negative <- count_missed_positive <- 0
+  for (i in length(biopsyTable)){
+    if(negative_biopsy[i]==1 & dataFrame$estimatedDecision[i]==FALSE){
+      count_saved_negative <- count_saved_negative+1
+    }
+    if(positive_biopsy[i]==1 & dataFrame$estimatedDecision[i]==TRUE){
+      count_missed_positive <- count_missed_positive+1
+    }
+  }
+  list(negative_biopsy=sum(dataFrame$negative_biopsy), saved_biopsy=count_saved_negative, positive_biopsy=sum(dataFrame$positive_biopsy), missed_biopsy=count_missed_positive)
 }
