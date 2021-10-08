@@ -336,14 +336,28 @@ get_saved_missed_biopsy_backward <- function(fit = NULL,
     }
   }
 
-  count_saved_negative <- count_missed_positive <- 0
-  for (i in length(biopsyTable)){
-    if(negative_biopsy[i]==1 & dataFrame$estimatedDecision[i]==FALSE){
+  count_negative <- count_positive <- count_saved_negative <- count_missed_positive <- 0
+  for (i in length(biopsyTable.subjectId)){
+    which.subject <- biopsyTable.subjectId[i]
+    boolVector <- biopsyTable.measureTime[i]-dataFrame$measureTime[dataFrame$subjectId==which.subject]<=tau0 & biopsyTable.measureTime[i]-dataFrame$measureTime[dataFrame$subjectId==which.subject]>0
+    if(any(boolVector)){
+      select.index <- max(which(boolVector))
+      selected.predict <- dataFrame$estimatedDecision[dataFrame$subjectId==which.subject][select.index]
+    } else {
+      next
+    }
+    if(biopsyTable.isPositive[i]==FALSE){
+      count_negative <- count_negative+1
+    }
+    if(biopsyTable.isPositive[i]==TRUE){
+      count_positive <- count_positive+1
+    }
+    if(biopsyTable.isPositive[i]==FALSE & selected.predict==FALSE){
       count_saved_negative <- count_saved_negative+1
     }
-    if(positive_biopsy[i]==1 & dataFrame$estimatedDecision[i]==TRUE){
+    if(biopsyTable.isPositive[i]==TRUE & selected.predict==FALSE){
       count_missed_positive <- count_missed_positive+1
     }
   }
-  list(negative_biopsy=sum(dataFrame$negative_biopsy), saved_biopsy=count_saved_negative, positive_biopsy=sum(dataFrame$positive_biopsy), missed_biopsy=count_missed_positive)
+  list(negative_biopsy=sum(biopsyTable.isPositive), saved_biopsy=count_saved_negative, positive_biopsy=sum(!biopsyTable.isPositive), missed_biopsy=count_missed_positive)
 }
