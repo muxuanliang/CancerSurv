@@ -1,4 +1,4 @@
-cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, method=c("osf", "sm", "pc_glm"), methodFitCensoring="km", time_varying = FALSE){
+cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, method=c("osf", "sm", "pc_glm", 'jama'), methodFitCensoring="km", time_varying = FALSE, coef_input = c(0.489,0.077, -0.968, 0,0.27, 0.476,-0.654,-1.715)){
   if (!time_varying){
   numberCovariate <- NCOL(covariate)
   if (is.null(colnames(covariate))){
@@ -87,9 +87,9 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       }
     }
     expr <- paste0("earlRes=try(DynTxRegime::owl(moPropen = moPropen,
-                    data = outt, reward=outt$outcome, txName = 'A',
-                    regime = ~ ",tmp_text,",lambdas =c(1,5, 10), cvFolds = 2,
-                    kernel = 'linear', surrogate = 'hinge',kparam = NULL), TRUE)")
+                    data = outt, reward=outt$outcome/mean(outt$outcome), txName = 'A',
+                    regime = ~ ",tmp_text,",lambdas =10^(seq(-2,1,length.out=11)), cvFolds = 2,
+                    kernel = 'linear', surrogate = 'logit',kparam = NULL), TRUE)")
     eval(expr = parse(text=expr))
 
     coef_osf = DynTxRegime::regimeCoef(earlRes)
@@ -189,6 +189,48 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     PC_GLM=c(coef(pc_glm)[1]-log(cutoff/(1-cutoff)), coef(pc_glm)[-1])
 
     res = list(coef=stan(PC_GLM))
+  } else if (method=="jama") {
+    coef <- coef_input
+
+    covariate=covariate[which(dataFrame$censoringIndicator==1|(dataFrame$censoringIndicator==0&dataFrame$indicator==0)),]
+    dataFrame=dataFrame[which(dataFrame$censoringIndicator==1|(dataFrame$censoringIndicator==0&dataFrame$indicator==0)),]
+
+    dataFrame$risk_score=covariate %*%coef
+
+    Cutoff=unique(dataFrame$risk_score)
+    Phi=Tpf=Fpf=NA
+    visit_index=dataFrame$measureTimeDiscrete/tau0 - min(dataFrame$measureTimeDiscrete)/tau0 + 1
+    for(kkl in 1:length(Cutoff)){
+      cutoff=Cutoff[kkl]
+      cutoff=rep(cutoff, length(times))
+      rule=NA
+      for(i in 1:nrow(dataFrame)){
+        rule[i]=ifelse(dataFrame$risk_score[i]>cutoff[visit_index[i]], 1, -1)
+      }
+
+      dataFrame$rule=rule
+      phi=tpf=fpf=NA
+      for(i in 1:length(times)){
+        sub_data=dataFrame[dataFrame$measureTimeDiscrete==times[i],]
+        idx=which(sub_data$censoringIndicator==1|(sub_data$censoringIndicator==0&sub_data$indicator==0))
+        sub_data=sub_data[idx,]
+        sub1=sub_data[(sub_data$timeToEvent-sub_data$measureTime)<=tau0,]
+        sub2=sub_data[(sub_data$timeToEvent-sub_data$measureTime)>tau0,]
+
+        phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
+        tpf[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)
+        fpf[i]=sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc)
+      }
+
+      Phi[kkl]=mean(phi)
+      Tpf[kkl]=mean(tpf)
+      Fpf[kkl]=mean(fpf)
+    }
+    idd=which(Phi==max(Phi))
+    cutoff=Cutoff[idd]
+    JAMA=c(-cutoff, coef)
+
+    res = list(coef=JAMA)
   }
   return(res)
   } else {
