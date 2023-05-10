@@ -1,4 +1,4 @@
-cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, method=c("osf", "sm", "pc_glm", 'jama'), methodFitCensoring="km", time_varying = FALSE, coef_input = c(0.489,0.077, -0.968, 0,0.27, 0.476,-0.654,-1.715)){
+cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureTimeDiscrete=NULL, covariate=NULL, censoringIndicator=NULL, tau0=6, tradeoff=0.75, trade_off_type=c("standard", "cbr"), method=c("osf", "sm", "pc_glm", 'jama'), methodFitCensoring="km", time_varying = FALSE, coef_input = c(0.489,0.077, -0.968, 0,0.27, 0.476,-0.654,-1.715), prevalence=NULL){
   if (!time_varying){
   numberCovariate <- NCOL(covariate)
   if (is.null(colnames(covariate))){
@@ -9,9 +9,16 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
   times=as.numeric(names(table(dataFrame$measureTimeDiscrete)))
   stopifnot(all(dataFrame$timeToEvent>=dataFrame$measureTime))
 
-  dataFrame$indicator=ifelse(dataFrame$timeToEvent-dataFrame$measureTime<=tau0, 1,0)
+  all_survival <- data.frame(subjectId=dataFrame$subjectId,
+                                  timeToEvent=dataFrame$timeToEvent,
+                                  censoringIndicator=dataFrame$censoringIndicator)
+  all_survival <- dplyr::distinct(all_survival)
+  km_all <- survival::survfit(survival::Surv(all_survival$timeToEvent,all_survival$censoringIndicator)~1)
+  survest_all <- stepfun(km_all$time, c(1, km_all$surv))
 
+  dataFrame$indicator=ifelse(dataFrame$timeToEvent-dataFrame$measureTime<=tau0, 1,0)
   dataFrame$ipc <- NULL
+  dataFrame$trade_off_weight <- trade_off_weight <-  NULL
   for(i in 1:length(times)){
     sub_data=dataFrame[dataFrame$measureTimeDiscrete==times[i],]
     sub_data$ipcw=rep(0, nrow(sub_data))
@@ -32,6 +39,13 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       sub_data$ipcw[sub_data$indicator==1]=predict(coxfit, type="survival")[sub_data$indicator==1]
       sub_data$ipcw[sub_data$indicator==0]=predict(coxfit, newdata=data.frame(sub_data[sub_data$indicator==0, 1:numberCovariate],timeToEvent=rep(tau0+times[i], times=sum(sub_data$indicator==0))), type="survival")
     }
+    if (is.null(prevalence)){
+      prevalence <- max((survest_all(times[i])-survest_all(tau0+times[i]))/survest_all(times[i]),0.01)
+      dataFrame$trade_off_weight[dataFrame$measureTimeDiscrete==times[i]] <- (1-prevalence)/prevalence
+      trade_off_weight[i] <- (1-prevalence)/prevalence
+    }
+    dataFrame$trade_off_weight[dataFrame$measureTimeDiscrete==times[i]] <- (1-prevalence[i])/prevalence[i]
+    trade_off_weight[i] <- (1-prevalence[i])/prevalence[i]
     for (j in 1:NROW(sub_data)){
       dataFrame$ipc[(dataFrame$subjectId==sub_data$subjectId[j])&(dataFrame$measureTimeDiscrete==times[i])] <- sub_data$ipcw[j]
     }
@@ -45,6 +59,11 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     denomm[i]=sum(ifelse(sub_data$timeToEvent-sub_data$measureTime<=tau0, 1,0)/sub_data$ipc)/sum(1/sub_data$ipc)
   }
 
+  if (trade_off_type=="standard"){
+    dataFrame$trade_off_weight <- 1
+    trade_off_weight <- 0*trade_off_weight+1
+  }
+
   if (method=="osf"){
     weighted=weight=denom=NA
     for(i in 1:nrow(dataFrame)){
@@ -54,7 +73,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       w1=ifelse((dataFrame$timeToEvent[i]-dataFrame$measureTime[i])<=tau0, 1, 0)/denom[i]
       w2=ifelse((dataFrame$timeToEvent[i]-dataFrame$measureTime[i])>tau0, 1, 0)/(1-denom[i])
       if(dataFrame$indicator[i]==0|dataFrame$censoringIndicator[i]==1){
-        weight[i]=(w1-(tradeoff*w2))/dataFrame$ipc[i]
+        weight[i]=(w1-(dataFrame$trade_off_weight[i]*tradeoff*w2))/dataFrame$ipc[i]
       } else {
         weight[i]=0
       }
@@ -93,6 +112,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
     eval(expr = parse(text=expr))
 
     coef_osf = DynTxRegime::regimeCoef(earlRes)
+
     res = list(coef=stan(coef_osf))
   } else if (method=="sm") {
     covariate=covariate[which(dataFrame$censoringIndicator==1|(dataFrame$censoringIndicator==0&dataFrame$indicator==0)),]
@@ -113,7 +133,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
 
     weight_glm = NULL
     visit_index = dataFrame$measureTimeDiscrete/tau0-min(dataFrame$measureTimeDiscrete)/tau0 + 1
-    weight_glm = dataFrame$response/ denomm[visit_index]-tradeoff*((1-dataFrame$response)/(1- denomm[visit_index]))
+    weight_glm = dataFrame$response/ denomm[visit_index]-trade_off_weight[visit_index]*tradeoff*((1-dataFrame$response)/(1- denomm[visit_index]))
     dataFrame$weight_glm = weight_glm
     model=paste0("geepack::geeglm(ifelse(weight_glm>0, 1, 0)~", paste(colnames(covariate), collapse=" + "),", id=subjectId, corstr='independence', data=dataFrame,family='binomial')" )
     coef_sm=coef(eval(parse(text=model)))
@@ -175,7 +195,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
         sub1=sub_data[(sub_data$timeToEvent-sub_data$measureTime)<=tau0,]
         sub2=sub_data[(sub_data$timeToEvent-sub_data$measureTime)>tau0,]
 
-        phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
+        phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-trade_off_weight[i]*tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
         tpf[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)
         fpf[i]=sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc)
       }
@@ -185,7 +205,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       Fpf[kkl]=mean(fpf)
     }
     idd=which(Phi==max(Phi))
-    cutoff=Cutoff[idd]
+    cutoff=min(max(Cutoff[idd]),0.9)
     PC_GLM=c(coef(pc_glm)[1]-log(cutoff/(1-cutoff)), coef(pc_glm)[-1])
 
     res = list(coef=stan(PC_GLM))
@@ -217,7 +237,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
         sub1=sub_data[(sub_data$timeToEvent-sub_data$measureTime)<=tau0,]
         sub2=sub_data[(sub_data$timeToEvent-sub_data$measureTime)>tau0,]
 
-        phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
+        phi[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)-trade_off_weight[i]*tradeoff*(sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc))
         tpf[i]=sum( ifelse(sub1$rule==1, 1, 0)/sub1$ipc)/sum(1/sub1$ipc)
         fpf[i]=sum( ifelse(sub2$rule==1, 1, 0)/sub2$ipc)/sum(1/sub2$ipc)
       }
@@ -227,10 +247,10 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       Fpf[kkl]=mean(fpf)
     }
     idd=which(Phi==max(Phi))
-    cutoff=Cutoff[idd]
+    cutoff=max(Cutoff[idd])
     JAMA=c(-cutoff, coef)
 
-    res = list(coef=JAMA)
+    res = list(coef=stan(JAMA))
   }
   return(res)
   } else {
@@ -241,7 +261,7 @@ cancerSurv=function(subjectId=NULL, timeToEvent=NULL, measureTime=NULL, measureT
       res[[index]] <- cancerSurv(subjectId=subjectId[measureTimeDiscrete==time_point], timeToEvent=timeToEvent[measureTimeDiscrete==time_point],
                  measureTime=measureTime[measureTimeDiscrete==time_point], measureTimeDiscrete=measureTimeDiscrete[measureTimeDiscrete==time_point],
                  covariate=covariate[measureTimeDiscrete==time_point,], censoringIndicator=censoringIndicator[measureTimeDiscrete==time_point],
-                 tau0=tau0, tradeoff=tradeoff, method=method, methodFitCensoring=methodFitCensoring, time_varying = FALSE)
+                 tau0=tau0, tradeoff=tradeoff, trade_off_type = trade_off_type, method=method, methodFitCensoring=methodFitCensoring, time_varying = FALSE)
       index <- index+1
     }
     return(res)
