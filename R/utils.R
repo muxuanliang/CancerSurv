@@ -989,3 +989,50 @@ calculate_conflict <- function(conflictTable){
               wont_miss_anyway=wont_miss_anyway, cannot_save_anyway=cannot_save_anyway,
               total_negative =sum(conflictTable$negative_biopsy), total_positive=sum(conflictTable$positive_biopsy)))
 }
+
+get_prevalence <-function(biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.eventTime,
+                                biopsyTable.primary_gleason, biopsyTable.secondary_gleason,
+                                tau0=0.5, timePoints=NULL){
+
+  # get biopsyTable
+  biopsyTable.primary_gleason[is.na(biopsyTable.primary_gleason)] <- 3
+  biopsyTable.secondary_gleason[is.na(biopsyTable.secondary_gleason)] <- 3
+  biopsyTable <- data.frame(subjectId=biopsyTable.subjectId, measureTime=biopsyTable.measureTime,
+                            is.positive=(biopsyTable.primary_gleason+biopsyTable.secondary_gleason)>6,
+                            discard=biopsyTable.measureTime > biopsyTable.eventTime,
+                            decision=NA)
+
+  pidList <- unique(biopsyTable$subjectId)
+  prevalence <- NULL
+  for (time in timePoints){
+    tmp_biopsy_table <- biopsyTable
+    tmp_biopsy_table$last_biopsy_time <- NULL
+    tmp_biopsy_table$final_biopsy <- FALSE
+    for (index in 1:NROW(tmp_biopsy_table)){
+      tmp_pid <- tmp_biopsy_table$subjectId[index]
+      if (index==1){
+        tmp_biopsy_table$last_biopsy_time[index] <- 0
+      } else if (tmp_biopsy_table$subjectId[index-1]!=tmp_pid){
+        tmp_biopsy_table$last_biopsy_time[index] <- 0
+      } else {
+        tmp_biopsy_table$last_biopsy_time[index] <- tmp_biopsy_table$measureTime[index-1]
+      }
+
+      if (tmp_biopsy_table$measureTime[index]==max(tmp_biopsy_table$measureTime[tmp_biopsy_table$subjectId==tmp_pid])){
+        tmp_biopsy_table$final_biopsy[index] <- TRUE
+      }
+    }
+
+    sd_scale <- sd(tmp_biopsy_table$measureTime)
+    hopt_p <- sd_scale* length(unique(tmp_biopsy_table$subjectId))^{-1/6}
+    hopt_n <- sd_scale* length(unique(tmp_biopsy_table$subjectId))^{-1/5}
+    est_prevalence <- ks(cbind(tmp_biopsy_table$last_biopsy_time,tmp_biopsy_table$measureTime),
+                         as.numeric(tmp_biopsy_table$is.positive), cbind(time,time+tau0), hopt = hopt_p)/
+      (ks(cbind(tmp_biopsy_table$last_biopsy_time,tmp_biopsy_table$measureTime), as.numeric(tmp_biopsy_table$is.positive),
+          cbind(time,time+tau0), hopt = hopt_p)+
+         ks(tmp_biopsy_table$measureTime, as.numeric(!tmp_biopsy_table$is.positive), time+tau0, hopt_n))
+    prevalence <- c(prevalence, est_prevalence)
+  }
+  prevalence
+}
+

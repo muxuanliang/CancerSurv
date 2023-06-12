@@ -1,7 +1,7 @@
 retune <-function(fit = NULL,biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.eventTime,
                   biopsyTable.primary_gleason, biopsyTable.secondary_gleason,
                   PSATable.covariate, PSATable.subjectId, PSATable.measureTime, PSATable.measureTimeDiscrete,
-                  tau0=0.5, time_varying=FALSE, timePoints=NULL, opt=NULL, xi=0.5){
+                  tau0=0.5, time_varying=FALSE, timePoints=NULL, opt=NULL, xi=0.5, prevalence=NULL){
 
 
   # get candidate
@@ -19,19 +19,26 @@ retune <-function(fit = NULL,biopsyTable.subjectId, biopsyTable.measureTime, bio
   if(!is.null(opt)){
     PSATable.covariate <- t(apply(PSATable.covariate,1,function(t){(t-opt$mean)/opt$sd}))
   }
-  cutoff_seq <- sort(unique(PSATable.covariate %*% fit$coef[-1]))
+  cutoff_seq <- seq(-min(unique(PSATable.covariate %*% fit$coef[-1])),
+                    -max(unique(PSATable.covariate %*% fit$coef[-1])),
+                    length.out=100)
 
 
   # try each cutoff
-  value <- array(NA, dim=length(cutoff_seq))
-  for (cutoff in cutoff_seq){
-    res_tmp <- get_tpr_tnr_proposed(fit = list(coef=c(cutoff, fit$coef[-1])),
-      biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.eventTime,
-      biopsyTable.primary_gleason, biopsyTable.secondary_gleason,
-      PSATable.covariate, PSATable.subjectId, PSATable.measureTime, PSATable.measureTimeDiscrete,
-      tau0=tau0, time_varying=FALSE, timePoints=timePoints, opt=opt)
+  value <- sapply(cutoff_seq, function(t){
+    res_tmp <- get_tpr_tnr_proposed(fit = list(coef=c(t, fit$coef[-1])),
+                                    biopsyTable.subjectId, biopsyTable.measureTime, biopsyTable.eventTime,
+                                    biopsyTable.primary_gleason, biopsyTable.secondary_gleason,
+                                    PSATable.covariate, PSATable.subjectId, PSATable.measureTime, PSATable.measureTimeDiscrete,
+                                    tau0=tau0, time_varying=FALSE, timePoints=timePoints, opt=opt)
 
-    value[cutoff==cutoff_seq] <- mean(res_tmp$TPR + xi * (1-res_tmp$prevalence)/res_tmp$prevalence * res_tmp$TNR)
-  }
+    if (is.null(prevalence)){
+      value <- mean(res_tmp$TPR + xi * (1-res_tmp$prevalence)/res_tmp$prevalence * res_tmp$TNR)
+    } else {
+      value <- mean(res_tmp$TPR + xi * (1-prevalence)/prevalence * res_tmp$TNR)
+    }
+    value
+  })
+
   list(coef=c(cutoff_seq[min(which.max(value))], fit$coef[-1]), value_opt=value[which.max(value)])
 }
